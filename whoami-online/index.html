@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2e1a3d">
+<title>Who Am I? Party game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:dark;--bg:#2e1a3d;--bg2:#3d2450;--ink:#f7eefc;--mut:#c9b4d8;--card:#f3e6c8;--cink:#2a1a33;--gold:#e8b84a;--cap:#7dfc5a;--no:#ff6b6b;--line:rgba(255,255,255,.14)}
+*{box-sizing:border-box;min-width:0}
+[hidden]{display:none!important}
+html{background:var(--bg)}
+body{margin:0;background:radial-gradient(120% 70% at 50% 0,var(--bg2),var(--bg));background-attachment:fixed;color:var(--ink);font:16px/1.5 Nunito,system-ui,sans-serif;min-height:100vh;overflow-x:clip;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+h1,h2,h3{font-family:Fredoka,Nunito,sans-serif;font-weight:700;line-height:1.05;margin:0}
+.wrap{max-width:620px;margin:0 auto;padding:18px max(4vw,16px) 56px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+header h1{font-size:clamp(28px,8vw,34px);color:var(--gold);white-space:nowrap}
+header h1 span{color:var(--ink)}
+.pill{background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:99px;padding:4px 12px;font:600 14px Fredoka,sans-serif;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--no)}.dot.on{background:var(--cap)}
+.banner{background:rgba(232,184,74,.15);border:1px solid var(--gold);border-radius:12px;padding:8px 12px;font-size:14px;margin-bottom:14px}
+section{display:none}section.on{display:block}
+.panel{background:rgba(0,0,0,.22);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:14px}
+.panel h2{font-size:20px;margin-bottom:10px}
+.mut{color:var(--mut);font-size:14px}
+input[type=text],textarea{font:16px Nunito,sans-serif;width:100%;background:rgba(255,255,255,.08);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:12px}
+textarea{min-height:110px;resize:vertical}
+.code{text-transform:uppercase;letter-spacing:.2em;font:700 22px Fredoka,sans-serif;text-align:center}
+input:focus-visible,button:focus-visible,textarea:focus-visible{outline:3px solid var(--cap);outline-offset:2px}
+button{font:600 16px Fredoka,sans-serif;min-height:44px;border-radius:14px;border:0;padding:10px 16px;cursor:pointer;color:var(--cink);background:var(--card)}
+button:disabled{opacity:.45;cursor:default}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button.gold{background:var(--gold)}button.go{background:var(--cap)}button.no{background:var(--no)}
+.big{width:100%;font-size:20px;min-height:58px}
+.or{display:flex;align-items:center;gap:10px;color:var(--mut);margin:16px 0;font-size:14px}.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+.join{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px}
+.roomcode{text-align:center}
+.roomcode .c{font:700 clamp(48px,16vw,72px)/1 Fredoka,sans-serif;letter-spacing:.12em;color:var(--gold);margin:6px 0 10px}
+.people{display:flex;flex-wrap:wrap;gap:8px}
+.person{background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:99px;padding:6px 14px;font:600 15px Fredoka,sans-serif}
+.person.host::after{content:" · host";color:var(--gold);font-weight:500}
+.cats{display:flex;flex-wrap:wrap;gap:8px}
+.cat{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:500}
+.cat[aria-pressed=true]{background:var(--gold);color:var(--cink);border-color:var(--gold)}
+.toggle{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.toggle input{width:26px;height:26px;accent-color:var(--cap);flex:none}
+.cap{font:700 clamp(22px,6vw,30px)/1.15 Fredoka,sans-serif;color:var(--cap);text-align:center;text-wrap:balance;-webkit-text-stroke:1.5px #0b2a05;paint-order:stroke fill;text-shadow:0 3px 0 #0b2a05;margin:2px 0 14px}
+.turn{text-align:center}
+.turn h2{font-size:clamp(28px,8vw,38px);color:var(--gold)}
+.turn p{margin:6px 0 14px;color:var(--mut)}
+.turn b{color:var(--ink)}
+.btns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.btns button{min-height:58px;font-size:19px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+.tile{text-align:center}
+.tile .nm{font:600 16px Fredoka,sans-serif;margin-bottom:6px;overflow-wrap:anywhere}
+.tile.act .nm{color:var(--gold)}
+.tile .st{font-size:13px;color:var(--mut);margin-top:6px;min-height:20px}
+.tile.done .card{opacity:.55}
+.card{background:var(--card);color:var(--cink);border-radius:14px;padding:8px 8px 10px;box-shadow:0 12px 28px rgba(0,0,0,.4),inset 0 0 0 2px rgba(120,80,30,.25);text-align:center}
+.tile.act .card{outline:3px solid var(--gold);outline-offset:3px}
+.frame{aspect-ratio:1;border-radius:9px;display:grid;place-items:center;border:5px solid var(--gold);box-shadow:inset 0 0 0 2px #a07422}
+.mono{font:700 56px/1 Fredoka,sans-serif;color:#fff;text-shadow:0 3px 0 rgba(0,0,0,.18)}
+.cname{font:700 19px/1.1 Fredoka,sans-serif;margin-top:8px;text-wrap:balance;overflow-wrap:anywhere}
+.cdeck{font-size:12px;color:#6b5577;margin-top:2px}
+.card.me .frame{background:repeating-linear-gradient(45deg,#4b2d60 0 12px,#3d2450 12px 24px)}
+.card.me .mono{color:var(--gold)}
+.loser{text-align:center}
+.loser .k{font:600 16px Fredoka,sans-serif;color:var(--mut)}
+.loser h2{font-size:clamp(40px,12vw,64px);color:var(--no);margin:4px 0 12px;overflow-wrap:anywhere}
+.punish{background:var(--card);color:var(--cink);border-radius:16px;padding:18px;font:700 clamp(20px,5.5vw,26px)/1.2 Fredoka,sans-serif;text-align:center;transform:rotate(-1.5deg);box-shadow:0 14px 30px rgba(0,0,0,.4);margin:0 auto 14px;max-width:440px}
+.punish small{display:block;font:600 13px Nunito,sans-serif;color:#6b5577;margin-bottom:6px}
+.rank{list-style:none;padding:0;margin:0;display:grid;gap:6px}
+.rank li{display:flex;justify-content:space-between;gap:10px;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,.05)}
+.rank li span:last-child{color:var(--mut);text-align:right}
+.rank li.l{background:rgba(255,107,107,.18)}
+.rowb{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:14px}
+.ov{position:fixed;inset:0;background:rgba(20,10,28,.92);display:none;align-items:center;justify-content:center;z-index:9}
+.ov.on{display:flex}
+.ov .n{font:700 clamp(120px,40vw,220px)/1 Fredoka,sans-serif;color:var(--gold)}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--card);color:var(--cink);font:700 17px Fredoka,sans-serif;padding:12px 18px;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:10;display:none;max-width:90vw;text-align:center}
+#toast.on{display:block}
+@media(prefers-reduced-motion:no-preference){.pop{animation:pop .4s cubic-bezier(.2,1.4,.4,1)}@keyframes pop{from{transform:scale(.6);opacity:0}}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Who <span>Am I?</span></h1><div class="pill" id="roomPill" hidden><i class="dot" id="dot"></i><span id="roomTxt"></span></div></header>
+  <div class="banner" id="localBanner" hidden>Preview mode: not connected online yet. Add test players in the lobby to try a full round, or open more tabs as extra phones.</div>
+
+  <!-- HOME -->
+  <section id="home">
+    <div class="panel">
+      <h2>Your name</h2>
+      <input type="text" id="name" maxlength="16" placeholder="e.g. Steven" autocomplete="nickname">
+    </div>
+    <button class="gold big" id="create">Create a room</button>
+    <div class="or">or join your friends</div>
+    <div class="join">
+      <input type="text" id="code" class="code" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters">
+      <button id="join">Join</button>
+    </div>
+    <p class="mut" style="margin-top:18px">How to play: everyone gets a secret card. You can see everyone's card except your own. Take turns asking one yes/no question and the others answer. Guess your card to be safe. The last one left gets the punishment.</p>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="lobby">
+    <div class="panel roomcode">
+      <div class="mut">Room code</div>
+      <div class="c" id="bigCode"></div>
+      <button class="ghost" id="share">Copy invite link</button>
+    </div>
+    <div class="panel">
+      <h2>Players (<span id="pCount">0</span>)</h2>
+      <div class="people" id="people"></div>
+      <div class="rowb" id="botRow" hidden><button class="ghost" id="addBot">+ Add test player</button><button class="ghost" id="clearBots">Clear test players</button></div>
+    </div>
+    <div id="hostOpts">
+      <div class="panel">
+        <h2>Decks</h2>
+        <div class="cats" id="cats"></div>
+      </div>
+      <div class="panel">
+        <div class="toggle"><span><b>Shared hint</b><br><span class="mut">All cards share a trait, like "All of you are yellow"</span></span><input type="checkbox" id="hint"></div>
+      </div>
+      <div class="panel">
+        <h2>Punishments</h2>
+        <p class="mut" style="margin:0 0 8px">One per line. The loser gets a random one.</p>
+        <textarea id="punishTxt"></textarea>
+      </div>
+      <div class="panel">
+        <h2>Your own cards</h2>
+        <p class="mut" style="margin:0 0 8px">One per line, traits after a colon (optional). Turn on the "Your cards" deck to use them.</p>
+        <textarea id="customTxt" placeholder="Our lecturer: school&#10;Kebab: hot, snack&#10;Lygon Street"></textarea>
+      </div>
+      <button class="gold big" id="start">Start game</button>
+    </div>
+    <div class="panel" id="guestWait"><h2>Waiting for the host to start…</h2><p class="mut" id="guestDecks" style="margin:8px 0 0"></p></div>
+    <div class="rowb"><button class="ghost" id="leave">Leave room</button></div>
+  </section>
+
+  <!-- PLAY -->
+  <section id="play">
+    <div class="cap" id="hintTxt"></div>
+    <div class="panel turn" id="turnBox"></div>
+    <div class="grid" id="grid"></div>
+    <div class="rowb" id="hostCtl"><button class="ghost" id="skip">Skip this turn</button><button class="ghost" id="cancel">Cancel round</button></div>
+  </section>
+
+  <!-- END -->
+  <section id="end">
+    <div id="endBox"></div>
+  </section>
+</div>
+<div class="ov" id="ov"><div class="n" id="ovN"></div></div>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="deck.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
