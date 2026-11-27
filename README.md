@@ -91,3 +91,7 @@ You need to be in the same room or on a voice call, because questions and answer
 - The host's phone runs the game. If the host closes the tab, the round pauses until they reopen the same link
   (their state is saved, so it carries on). Anyone else can refresh or rejoin with no problem.
 - Someone determined could peek at their own card through dev tools. It's a party game, so play fair.
+
+## Credits
+
+Card pictures: [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (3D style), MIT licence. See `img/LICENSE-fluentui-emoji.txt`.
