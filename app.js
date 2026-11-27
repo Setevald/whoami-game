@@ -6,6 +6,9 @@
 const CFG = window.WHOAMI_CONFIG || {};
 const params = new URLSearchParams(location.search);
 const LOCAL = !CFG.SUPABASE_URL || params.has('local');
+const EMOJI = window.WHOAMI_EMOJI || {};
+// Card art: Microsoft Fluent Emoji 3D (MIT licence), stored as img/<codepoints>.webp
+const imgCode = e => [...e].filter(ch => ch !== '️').map(ch => ch.codePointAt(0).toString(16)).join('-');
 const DECKS = window.WHOAMI_DECKS, CARDS = window.WHOAMI_CARDS, PHRASE = window.WHOAMI_PHRASE;
 const DEFAULT_DECKS = ['animals', 'food', 'jobs', 'things', 'places', 'people', 'games'];
 const DEFAULT_PUNISH = [
@@ -93,9 +96,10 @@ function newState() {
   return {
     v: 0, host: myId, phase: 'lobby', round: 0,
     players: [{ id: myId, name: myName }],
-    opts: { decks: DEFAULT_DECKS.slice(), hint: true, punish: DEFAULT_PUNISH.join('\n'), custom: '' },
+    opts: { decks: DEFAULT_DECKS.slice(), hint: true, turnSecs: 0, punish: DEFAULT_PUNISH.join('\n'), custom: '' },
     cards: {}, order: [], turn: null, done: [], pending: null, tag: null,
-    last: null, loser: null, punish: '', used: [], started: 0, bots: []
+    last: null, loser: null, punish: '', used: [], started: 0, bots: [],
+    tally: {}, turnEnds: 0, sentAt: 0
   };
 }
 
@@ -142,10 +146,29 @@ function onMsg(m) {
 function push(bump = true) {
   if (!isHost || !S) return;
   if (bump) S.v++;
+  S.sentAt = Date.now();
   LS.set('wa.host.' + room, S);
   if (T) T.send({ t: 'state', s: S });
   render();
   scheduleBots();
+  scheduleTurnTimer();
+}
+
+/* ---------- turn timer (host enforces it) ---------- */
+let turnT;
+function setTurnClock(extra = 0) {
+  const s = +S.opts.turnSecs || 0;
+  S.turnEnds = s ? Date.now() + extra + s * 1000 : 0;
+}
+function scheduleTurnTimer() {
+  clearTimeout(turnT);
+  if (!isHost || !S || S.phase !== 'play' || !S.turnEnds || S.pending) return;
+  const key = S.round + ':' + S.turn + ':' + S.turnEnds;
+  turnT = setTimeout(() => {
+    if (S.phase !== 'play' || S.pending || S.round + ':' + S.turn + ':' + S.turnEnds !== key) return;
+    S.last = { k: S.v + 1, id: S.turn, ok: false, timeout: true };
+    advanceFrom(S.turn); push();
+  }, Math.max(0, S.turnEnds - Date.now()) + 300);
 }
 
 /* ---------- test players (local/preview mode only) ---------- */
@@ -226,6 +249,7 @@ function deal() {
   S.tag = tag; S.order = shuffle(ids); S.turn = S.order[0];
   S.done = []; S.pending = null; S.last = null; S.loser = null; S.punish = '';
   S.round++; S.started = Date.now(); S.phase = 'play';
+  setTurnClock(3200); // includes the 3-2-1 countdown
   return null;
 }
 
@@ -233,11 +257,11 @@ const remaining = () => S.order.filter(id => !S.done.includes(id));
 
 function advanceFrom(id) {
   const left = remaining();
-  if (left.length <= 1) return finish();
+  if (left.length <= 1) { finish(); recordResult(); return; }
   let i = S.order.indexOf(id);
   for (let k = 0; k < S.order.length; k++) {
     i = (i + 1) % S.order.length;
-    if (!S.done.includes(S.order[i])) { S.turn = S.order[i]; return; }
+    if (!S.done.includes(S.order[i])) { S.turn = S.order[i]; setTurnClock(); return; }
   }
 }
 
@@ -245,7 +269,15 @@ function finish() {
   S.loser = remaining()[0] || null;
   const list = String(S.opts.punish || '').split('\n').map(s => s.trim()).filter(Boolean);
   S.punish = list.length ? pick(list) : 'The group decides!';
-  S.phase = 'end'; S.pending = null; S.turn = null;
+  S.phase = 'end'; S.pending = null; S.turn = null; S.turnEnds = 0;
+}
+
+function recordResult() {
+  S.tally = S.tally || {};
+  const bump = (id, f) => { if (!id) return; const t = S.tally[id] || (S.tally[id] = { name: nameOf(id), wins: 0, losses: 0, played: 0 }); t.name = nameOf(id); t[f]++; };
+  S.order.forEach(id => bump(id, 'played'));
+  bump(S.done[0], 'wins');
+  bump(S.loser, 'losses');
 }
 
 function reduce(from, a) {
@@ -255,7 +287,8 @@ function reduce(from, a) {
     case 'opts': if (host && S.phase === 'lobby') S.opts = a.opts; break;
     case 'start': if (host) { const err = deal(); if (err) { toast(err); return; } } break;
     case 'next': if (S.phase === 'play' && from === S.turn && !S.pending) advanceFrom(from); break;
-    case 'guess': if (S.phase === 'play' && from === S.turn && !S.pending) S.pending = from; break;
+    case 'guess': if (S.phase === 'play' && from === S.turn && !S.pending) { S.pending = from; S.turnEnds = 0; } break;
+    case 'resetTally': if (host) S.tally = {}; break;
     case 'verdict':
       if (S.phase !== 'play' || !S.pending || from === S.pending || !inGame) return;
       {
@@ -286,7 +319,8 @@ function cardHTML(c, mine) {
   if (mine) return `<div class="card me"><div class="frame"><span class="mono">?</span></div><div class="cname">You</div><div class="cdeck">Your secret card</div></div>`;
   const ini = c.n.replace(/\(.*?\)|".*?"/g, '').trim().split(/\s+/).filter(w => /^[A-Za-z]/.test(w)).slice(0, 2).map(w => w[0].toUpperCase()).join('') || '?';
   const h = HUES[Math.abs(hash(c.n)) % HUES.length];
-  return `<div class="card"><div class="frame" style="background:radial-gradient(circle at 35% 30%,${h}cc,${h})"><span class="mono">${esc(ini)}</span></div><div class="cname">${esc(c.n)}</div><div class="cdeck">${esc(DECKS[c.d] || '')}</div></div>`;
+  const pic = EMOJI[c.n];
+  return `<div class="card"><div class="frame" style="background:radial-gradient(circle at 35% 30%,${h}88,${h})">${pic ? `<img class="pic" src="img/${imgCode(pic)}.webp" alt="" onerror="this.outerHTML='<span class=emo>${pic}</span>'">` : `<span class="mono">${esc(ini)}</span>`}</div><div class="cname">${esc(c.n)}</div><div class="cdeck">${esc(DECKS[c.d] || '')}</div></div>`;
 }
 
 function show(id) { for (const s of document.querySelectorAll('section')) s.classList.toggle('on', s.id === id); }
@@ -303,18 +337,28 @@ function render() {
   effects();
 }
 
+function scoreHTML() {
+  const rows = Object.entries(S.tally || {}).sort((a, b) => b[1].losses - a[1].losses || a[1].wins - b[1].wins);
+  if (!rows.length) return '';
+  const most = rows[0][1].losses;
+  return `<div class="panel"><h2>Tonight's scoreboard</h2><table class="score"><thead><tr><th>Player</th><th>Lost</th><th>Won</th><th>Played</th></tr></thead><tbody>${rows.map(([id, t]) => `<tr${t.losses && t.losses === most ? ' class="worst"' : ''}><td>${esc(t.name)}${id === myId ? ' (you)' : ''}</td><td>${t.losses}</td><td>${t.wins}</td><td>${t.played}</td></tr>`).join('')}</tbody></table><p class="mut" style="margin:8px 0 0">Won = first one to guess their card.</p></div>`;
+}
+
 let optsDrawn = false;
 function renderLobby() {
   $('bigCode').textContent = room;
   const players = S ? S.players : presence;
   $('pCount').textContent = players.length;
   $('people').innerHTML = players.map(p => `<span class="person${S && p.id === S.host ? ' host' : ''}">${esc(p.name)}${p.id === myId ? ' (you)' : ''}</span>`).join('') || '<span class="mut">Connecting…</span>';
+  $('lobbyScore').innerHTML = S ? scoreHTML() : '';
+  $('resetTally').hidden = !(isHost && S && Object.keys(S.tally || {}).length);
   $('hostOpts').hidden = !isHost;
   $('guestWait').hidden = isHost;
   if (!S) { $('guestDecks').textContent = 'Connecting to the host… check the room code if this takes long.'; return; }
   if (isHost) {
     $('cats').innerHTML = Object.entries(DECKS).map(([k, v]) => `<button class="cat" data-c="${k}" aria-pressed="${S.opts.decks.includes(k)}">${esc(v)}</button>`).join('');
     $('hint').checked = S.opts.hint;
+    $('turnSecs').value = String(S.opts.turnSecs || 0);
     if (!optsDrawn) { $('punishTxt').value = S.opts.punish; $('customTxt').value = S.opts.custom; optsDrawn = true; }
     $('botRow').hidden = !LOCAL;
     $('start').disabled = S.players.length < 2;
@@ -343,7 +387,9 @@ function renderPlay() {
   } else {
     box = `<h2>${esc(nameOf(S.turn))}'s turn</h2><p>Answer their question out loud. Their card is <b>${esc(S.cards[S.turn].n)}</b>.</p>`;
   }
+  if (S.turnEnds && !S.pending && playing) box += `<div class="tclock"><div class="bar"><i id="tbar"></i></div><span id="tnum"></span></div>`;
   $('turnBox').innerHTML = box;
+  tickClock();
   $('grid').innerHTML = S.order.map(id => {
     const done = S.done.indexOf(id);
     const st = done >= 0 ? `Safe, ${ord(done + 1)}` : id === S.turn ? (S.pending === id ? 'Guessing…' : 'Asking now') : online(id) ? '' : 'Offline';
@@ -369,6 +415,7 @@ function renderEnd() {
     </div>
     <div class="panel"><h2>Results</h2><ol class="rank">${ranked.map((id, i) => `<li class="${id === S.loser ? 'l' : ''}"><span>${i + 1}. ${esc(nameOf(id))}</span><span>${esc(S.cards[id]?.n || '')}</span></li>`).join('')}</ol></div>
     <div class="grid">${S.order.map(id => `<div class="tile"><div class="nm">${esc(nameOf(id))}</div>${cardHTML(S.cards[id])}</div>`).join('')}</div>
+    <div style="margin-top:14px">${scoreHTML()}</div>
     <div class="rowb">${isHost ? `<button class="gold" id="again">Play again</button><button class="ghost" id="toLobby">Back to lobby</button>` : `<p class="mut">Waiting for the host to start the next round…</p>`}</div>`;
   const r = $('reroll'), ag = $('again'), tl = $('toLobby');
   if (r) r.onclick = () => act({ type: 'reroll' });
@@ -386,7 +433,7 @@ function effects() {
   if (S.last && S.last.k !== seenLast) {
     seenLast = S.last.k;
     const who = S.last.id === myId ? 'You' : nameOf(S.last.id);
-    toast(S.last.ok ? `${who} got it! Safe ✓` : `Wrong guess from ${who}`);
+    toast(S.last.timeout ? `Time's up for ${who}!` : S.last.ok ? `${who} got it! Safe ✓` : `Wrong guess from ${who}`);
   }
 }
 function countdown() {
@@ -397,6 +444,18 @@ function countdown() {
     if (n > 0) t.textContent = n; else if (n === 0) t.textContent = 'GO'; else { clearInterval(iv); ov.classList.remove('on'); }
   }, 800);
 }
+// local deadline = my clock + (host deadline - host send time), so phones with different clocks still agree
+let clockKey = '', deadline = 0, total = 1;
+function tickClock() {
+  if (!S || S.phase !== 'play' || !S.turnEnds || S.pending) { clockKey = ''; return; }
+  const key = S.round + ':' + S.turn + ':' + S.turnEnds;
+  if (key !== clockKey) { clockKey = key; deadline = Date.now() + (S.turnEnds - (S.sentAt || Date.now())); total = (+S.opts.turnSecs || 1) * 1000; }
+  const left = Math.max(0, deadline - Date.now()), bar = $('tbar'), num = $('tnum');
+  if (bar) { bar.style.width = Math.min(100, left / total * 100) + '%'; bar.parentElement.classList.toggle('low', left < 10000); }
+  if (num) num.textContent = Math.ceil(left / 1000) + 's';
+}
+setInterval(tickClock, 250);
+
 let toastT;
 function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 2600); }
 
@@ -424,13 +483,15 @@ $('share').onclick = async () => {
     else { await navigator.clipboard.writeText(url); toast('Invite link copied'); }
   } catch (e) { toast(url); }
 };
-const sendOpts = () => act({ type: 'opts', opts: Object.assign({}, S.opts, { hint: $('hint').checked, punish: $('punishTxt').value, custom: $('customTxt').value }) });
+const sendOpts = () => act({ type: 'opts', opts: Object.assign({}, S.opts, { hint: $('hint').checked, turnSecs: +$('turnSecs').value, punish: $('punishTxt').value, custom: $('customTxt').value }) });
 $('cats').addEventListener('click', e => {
   const k = e.target.dataset.c; if (!k || !isHost) return;
   const decks = S.opts.decks.includes(k) ? S.opts.decks.filter(d => d !== k) : S.opts.decks.concat(k);
   S.opts.decks = decks; sendOpts();
 });
 $('hint').onchange = sendOpts;
+$('turnSecs').onchange = sendOpts;
+$('resetTally').onclick = () => act({ type: 'resetTally' });
 $('punishTxt').onchange = sendOpts;
 $('customTxt').onchange = sendOpts;
 $('start').onclick = () => { sendOpts(); act({ type: 'start' }); };
